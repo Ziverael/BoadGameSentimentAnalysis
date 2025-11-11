@@ -1,32 +1,9 @@
-#!/usr/bin/python
-###IMPORTS###
-from selenium import webdriver
-from selenium.webdriver.firefox.options import Options
-from selenium.webdriver.firefox.service import Service
-from selenium.webdriver import Chrome
-from selenium.webdriver import ChromeOptions
-
-from bs4 import BeautifulSoup as bsp
-import os
-import sys
-import pandas as pd
-import numpy as np
-import requests #Communicatrion with web
-from selenium import webdriver # Dynamic scraping for JS websites
-from selenium.webdriver.firefox.options import Options
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import NoSuchElementException
-
 import re
-import csv
-from dotenv import load_dotenv
-from sys import stderr
-from dataclasses import dataclass, asdict
 from src.scraper import SimpleScraper
 from src.dynamic_scraper import Scraper
 from src.model import Game
 from typing import Final
+from pydantic import BaseModel
         
 BASE_URL: Final[str] = "https://boardgamegeek.com"
 CATEGORIES_URL: Final[str] = f"{BASE_URL}/browse/boardgamecategory"
@@ -34,6 +11,14 @@ GAMES_URL: Final[str] = "https://boardgamegeek.com/browse/boardgame"
 TIMEOUT: Final[int] =10
 PROXY: Final[str | None] = None
 GAMES_NO: int = 304
+
+class GameParams(BaseModel):
+    age: str
+    time: str
+    players: str
+    weight: float
+    
+    
 
 def get_games_pages(scraper: SimpleScraper, limit: int) -> list[str]:
     links: list[str] = []
@@ -55,69 +40,77 @@ def get_games_pages(scraper: SimpleScraper, limit: int) -> list[str]:
                 )
             )
         )
+    links = [BASE_URL +  a.get("href") for a in links[:limit]]
     return links[:limit]
 
-###FUNCTIONS###
+def get_anchors_from_first_table(scraper: Scraper) -> list[str]:
+    table = scraper.scrape("table", get_text = False, all_results = False)
+    return scraper.scrape(
+        "a",
+        parent=table,
+    )
+
+def collect_game_info(scraper: Scraper, game_page_url: str):
+    scraper.set_page(game_page_url)
+    params_raw = scraper.scrape('p', class_ = "gameplay-item-primary", get_text = False)
+    params = get_game_params(params_raw)
+    title, release = get_title_and_release_date(scraper)
+    long_description = get_long_description(scraper)
+    short_description = get_short_description(scraper)
+    print(short_description)
+
+def get_game_params(params: list[str]) -> GameParams:
+    words = [re.split(r'[\t ]+', p.get_text()) for p in params]
+    cleaned_params = [list(filter(lambda t: t != "", w)) for w in words]
+    return GameParams(
+        players=cleaned_params[0][0],
+        time=cleaned_params[1][0],
+        age=cleaned_params[2][1],
+        weight=float(cleaned_params[3][2]),
+    )
+
+def get_title_and_release_date(scraper: Scraper) -> tuple[str, str]:
+        title_div = scraper.scrape("div", class_="game-header-title-info", get_text=False)[1]
+        title_raw = scraper.scrape("h1", parent=title_div, get_text=True, all_results=False)
+        return get_title(title_raw), get_release(title_raw)
+
+def get_title(title_raw: str) -> str:
+    title = re.sub(r"\t+", "", title_raw)
+    title = re.sub(r" +\(\d+\) +", "", title)
+    return re.sub(r"^ +", "", title)
+    
+def get_release(title_raw: str) -> str:
+    title = re.sub(r"\t+", "", title_raw)
+    release = re.findall(r"\(.+\)", title)[0]
+    return re.sub(r"[\(\)]", "", release)
+
+def get_short_description(scraper: Scraper) -> str:
+    short_desc_div = scraper.scrape(
+        "div", class_="game-header-title-container", get_text=False
+    )[1]
+    return scraper.scrape("p", parent=short_desc_div, all_results=False)
+
+def get_long_description(scraper: Scraper) -> str:
+    long_desc = scraper.scrape(
+        "article", class_="game-description-body"
+    )[0]
+    return re.sub(r"([\t ]+$)|(\n)", "", long_desc)
+
+
+
 def main():
     links = get_games_pages(SimpleScraper(BASE_URL), GAMES_NO)
-    print(len(links))
+    scraper = Scraper(CATEGORIES_URL, timeout=TIMEOUT, proxy=PROXY)
+    categories = get_anchors_from_first_table(scraper)
+    collect_game_info(scraper, links[0])
     raise ValueError("Yo!")
-    #Load variables
-    load_dotenv()
-    #Set variables
-    pages = 2
-    LIMIT = 2
-    iter = 0
-    games_links = []
-
-    #Initialize scraper
-
-    #Get categories
-    categories = reqScraper.scrape('a', parent = reqScraper.scrape('table', get_text = False, all_results = False))
-
-    #Get games links
-    for page_no in range(1, pages + 1):
-        pageURL = gamesURL + "/" + str(page_no)
-        reqScraper.set_page(pageURL)
-        games_links.extend(
-            reqScraper.scrape(
-                'a',
-                class_ = "primary",
-                get_text = False,
-                parent = reqScraper.scrape('table', id_ = "collectionitems", get_text = False, all_results = False)
-            )
-        )
-    games_links = [ baseURL + link.get('href') for link in games_links]
-    print(games_links)
 
     dynamic_scraper = Scraper(baseURL, timeout = TIMEOUT, proxy = PROXY)
     for idx, link in enumerate(games_links):
-        print(f"Loop:{idx}")
         
-        print(link)
-        dynamic_scraper.set_page(link)
-        
-        #Get game parameters
-        params = dynamic_scraper.scrape('p', class_ = "gameplay-item-primary", get_text = False)
-        #Split paragraphs to single words
-        params = [re.split(r'[\t ]+', par.get_text()) for par in params]
-        #Remove empty elements
-        params = [list(filter(lambda t: t != "", par)) for par in params]
-        print(params)
-        #Parse games parameters
-        extracted_params = Game.extract_params(params)
-        print(extracted_params)
-        #Get release date and game title
-        release, title = Game.get_title_and_release_date(dynamic_scraper)
-        print(release, title)
-        #Get description
-        description = Game.get_descriptions(dynamic_scraper)
-
 if __name__ == "__main__":
     main()
     iter = 0
-    #Load variables
-    load_dotenv()
 
     # baseURL = os.getenv("BASE_URL")
     # bggURL = "https://boardgamegeek.com/browse/boardgamecategory"
