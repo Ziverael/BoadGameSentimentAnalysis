@@ -20,7 +20,7 @@ CATEGORIES_URL: Final[str] = f"{BASE_URL}/browse/boardgamecategory"
 GAMES_URL: Final[str] = "https://boardgamegeek.com/browse/boardgame"
 TIMEOUT: Final[int] = 10
 PROXY: Final[str | None] = None
-GAMES_NO: int = 500
+GAMES_NO: int = 1
 
 
 class Game(BaseModel):
@@ -107,6 +107,11 @@ def main():
                 [item.model_dump() for item in e.results], f, separators=(",", ":")
             )
         raise
+    with open("games.json", "w") as f:
+        json.dump(
+            [item.model_dump() for item in games], f, separators=(",", ":")
+        )
+
 
 
 if __name__ == "__main__":
