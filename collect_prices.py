@@ -17,7 +17,7 @@ CATEGORIES_URL: Final[str] = f"{BASE_URL}/browse/boardgamecategory"
 GAMES_URL: Final[str] = "https://boardgamegeek.com/browse/boardgame"
 TIMEOUT: Final[int] = 10
 PROXY: Final[str | None] = None
-GAMES_NO: int = 1
+GAMES_NO: int = 200
 
 
 class GamePrice(BaseModel):
